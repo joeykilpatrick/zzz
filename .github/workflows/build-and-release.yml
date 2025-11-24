@@ -1,0 +1,71 @@
+name: Build and Release AHK Executable
+
+on:
+  push:
+    tags:
+      - "v*"   # Runs only when you push a version tag, e.g. v1.0.0
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name:  Download AutoHotKey v1.1 release and verify SHA256 hash
+        run: |
+          $url = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v1.1.37.02/AutoHotkey_1.1.37.02.zip"
+          $output = "AutoHotKey.zip"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Get-FileHash $output -Algorithm SHA256 | Out-File "hash.txt"
+          type hash.txt
+          $EXPECTED_SHA256 = "6f3663f7cdd25063c8c8728f5d9b07813ced8780522fd1f124ba539e2854215f"
+          $ACTUAL_HASH = (Get-FileHash $output -Algorithm SHA256).Hash.ToLower()
+          if ($ACTUAL_HASH -ne $EXPECTED_SHA256.ToLower()) {
+            Write-Host "❌ Hash mismatch!"
+            Write-Host "Expected: $EXPECTED_SHA256"
+            Write-Host "Actual:   $ACTUAL_HASH"
+            exit 1
+          } else {
+            Write-Host "✅ Hash verified."
+          }
+          Remove-Item "hash.txt"
+
+
+      - name: Download Ahk2Exe release and verify SHA256 hash
+        run: |
+          $url = "https://github.com/AutoHotkey/Ahk2Exe/releases/download/Ahk2Exe1.1.37.02a0a/Ahk2Exe1.1.37.02a0.zip"
+          $output = "Ahk2Exe.zip"
+          Invoke-WebRequest -Uri $url -OutFile $output
+          Get-FileHash $output -Algorithm SHA256 | Out-File "hash.txt"
+          type hash.txt
+          $EXPECTED_SHA256 = "287079ba96dcfa79fa6c568481f4a26bd3ac26671f8a21c4c03ed331657d53c0"
+          $ACTUAL_HASH = (Get-FileHash $output -Algorithm SHA256).Hash.ToLower()
+          if ($ACTUAL_HASH -ne $EXPECTED_SHA256.ToLower()) {
+            Write-Host "❌ Hash mismatch!"
+            Write-Host "Expected: $EXPECTED_SHA256"
+            Write-Host "Actual:   $ACTUAL_HASH"
+            exit 1
+          } else {
+            Write-Host "✅ Hash verified."
+          }
+           
+      - name: Build .exe from .ahk
+        run: |
+          Expand-Archive -Path AutoHotKey.zip -DestinationPath AutoHotKey
+          Expand-Archive -Path Ahk2Exe.zip -DestinationPath Ahk2Exe
+          $ahkScript = "zzz.ahk"
+          $outputExe = "zzz.exe"
+          & ".\Ahk2Exe\Ahk2Exe.exe" /in $ahkScript /out $outputExe /base ".\AutoHotKey\Compiler\Unicode 64-bit.bin"
+
+      - name: Create or update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "zzz.exe"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
